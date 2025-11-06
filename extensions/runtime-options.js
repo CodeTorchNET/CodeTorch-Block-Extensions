@@ -183,17 +183,6 @@
           "---",
 
           {
-            opcode: "setUsername",
-            text: Scratch.translate("set username to [username]"),
-            blockType: Scratch.BlockType.COMMAND,
-            arguments: {
-              username: {
-                type: Scratch.ArgumentType.STRING,
-                defaultValue: "",
-              },
-            },
-          },
-          {
             opcode: "greenFlag",
             text: Scratch.translate("run green flag [flag]"),
             blockType: Scratch.BlockType.COMMAND,
@@ -400,12 +389,6 @@
       width = Scratch.Cast.toNumber(width);
       height = Scratch.Cast.toNumber(height);
       Scratch.vm.setStageSize(width, height);
-    }
-
-    setUsername({ username }) {
-      Scratch.vm.postIOData("userData", {
-        username: Scratch.Cast.toString(username),
-      });
     }
 
     greenFlag() {

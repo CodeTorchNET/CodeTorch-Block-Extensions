@@ -141,7 +141,7 @@
             arguments: {
               one: {
                 type: Scratch.ArgumentType.STRING,
-                defaultValue: "https://turbowarp.org/",
+                defaultValue: "https://codetorch.net/",
               },
             },
           },
@@ -153,7 +153,7 @@
             arguments: {
               one: {
                 type: Scratch.ArgumentType.STRING,
-                defaultValue: "https://turbowarp.org/",
+                defaultValue: "https://codetorch.net/",
               },
             },
           },

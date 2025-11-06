@@ -107,7 +107,7 @@
             arguments: {
               SERVER: {
                 type: Scratch.ArgumentType.STRING,
-                defaultValue: "wss://clouddata.turbowarp.org",
+                defaultValue: "wss://cloudserver.codetorch.net/",
               },
             },
           },

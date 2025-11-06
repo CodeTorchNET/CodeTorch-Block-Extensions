@@ -1,17 +1,12 @@
 import * as fs from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import * as pathUtil from "node:path";
-import * as urlUtil from "node:url";
-import AdmZip from "adm-zip";
 import chokidar from "chokidar";
 import spdxParser from "spdx-expression-parse";
 import { imageSize } from "image-size";
 import ExtendedJSON from "@turbowarp/json";
-import compatibilityAliases from "./compatibility-aliases.js";
 import parseMetadata from "./parse-extension-metadata.js";
 import parseTranslations from "./parse-extension-translations.js";
-import renderTemplate from "./render-template.js";
-import renderDocs from "./render-docs.js";
 import { mkdirp, recursiveReadDirectory } from "./fs-utils.js";
 import {
   fetchAllDependencies,
@@ -159,7 +154,7 @@ class ExtensionFile extends BuildFile {
   /**
    * @param {string} absolutePath Full path to the .js file, eg. /home/.../extensions/fetch.js
    * @param {string} slug Just the extension ID from the path, eg. fetch
-   * @param {boolean} featured true if the extension is the homepage
+   * @param {boolean} featured true if the extension should be included in extensions.json
    * @param {Record<string, Record<string, string>>} allTranslations All extension runtime translations
    * @param {Mode} mode
    */
@@ -325,105 +320,11 @@ class ExtensionFile extends BuildFile {
   }
 }
 
-class HomepageFile extends BuildFile {
-  constructor(
-    extensionFiles,
-    extensionImages,
-    featuredSlugs,
-    withDocs,
-    samples,
-    mode
-  ) {
-    super(pathUtil.join(import.meta.dirname, "homepage-template.ejs"));
-
-    /** @type {Record<string, ExtensionFile>} */
-    this.extensionFiles = extensionFiles;
-
-    /** @type {Record<string, string>} */
-    this.extensionImages = extensionImages;
-
-    /** @type {string[]} */
-    this.featuredSlugs = featuredSlugs;
-
-    /** @type {Map<string, SampleFile[]>} */
-    this.withDocs = withDocs;
-
-    /** @type {SampleFile[]} */
-    this.samples = samples;
-
-    /** @type {Mode} */
-    this.mode = mode;
-
-    this.host =
-      mode === "development"
-        ? "http://localhost:8000/"
-        : "https://extensions.turbowarp.org/";
-  }
-
-  getType() {
-    return ".html";
-  }
-
-  getFullExtensionURL(extensionSlug) {
-    return `${this.host}${extensionSlug}.js`;
-  }
-
-  getDocumentationURL(extensionSlug) {
-    return `${this.host}${extensionSlug}`;
-  }
-
-  getRunExtensionURL(extensionSlug) {
-    return `https://turbowarp.org/editor?extension=${this.getFullExtensionURL(
-      extensionSlug
-    )}`;
-  }
-
-  /**
-   * @param {SampleFile} sampleFile
-   * @returns {string}
-   */
-  getRunSampleURL(sampleFile) {
-    const path = encodeURIComponent(`samples/${sampleFile.getSlug()}`);
-    return `https://turbowarp.org/editor?project_url=${this.host}${path}`;
-  }
-
-  read() {
-    const mostRecentExtensions = Object.entries(this.extensionFiles)
-      .sort((a, b) => b[1].getLastModified() - a[1].getLastModified())
-      .slice(0, 5)
-      .map((i) => i[0]);
-
-    const extensionMetadata = Object.fromEntries(
-      this.featuredSlugs.map((slug) => [
-        slug,
-        {
-          ...this.extensionFiles[slug].getMetadata(),
-          hasDocumentation: this.withDocs.has(slug),
-          samples: this.samples.get(slug) || [],
-        },
-      ])
-    );
-
-    return renderTemplate(this.sourcePath, {
-      mode: this.mode,
-      mostRecentExtensions,
-      extensionImages: this.extensionImages,
-      extensionMetadata,
-      getFullExtensionURL: this.getFullExtensionURL.bind(this),
-      getRunExtensionURL: this.getRunExtensionURL.bind(this),
-      getDocumentationURL: this.getDocumentationURL.bind(this),
-      getRunSampleURL: this.getRunSampleURL.bind(this),
-    });
-  }
-}
-
 class JSONMetadataFile extends BuildFile {
   constructor(
     extensionFiles,
     extensionImages,
     featuredSlugs,
-    withDocs,
-    samples,
     allTranslations
   ) {
     super(null);
@@ -436,12 +337,6 @@ class JSONMetadataFile extends BuildFile {
 
     /** @type {string[]} */
     this.featuredSlugs = featuredSlugs;
-
-    /** @type {Set<string>} */
-    this.withDocs = withDocs;
-
-    /** @type {Map<string, SampleFile[]>} */
-    this.samples = samples;
 
     /** @type {Record<string, Record<string, string>>} */
     this.allTranslations = allTranslations;
@@ -492,13 +387,6 @@ class JSONMetadataFile extends BuildFile {
       if (metadata.original.length) {
         extension.original = metadata.original;
       }
-      if (this.withDocs.has(extensionSlug)) {
-        extension.docs = true;
-      }
-      const samples = this.samples.get(extensionSlug);
-      if (samples) {
-        extension.samples = samples.map((i) => i.getTitle());
-      }
       if (metadata.scratchCompatible) {
         extension.scratchCompatible = true;
       }
@@ -546,92 +434,6 @@ IMAGE_FORMATS.set(".png", ImageFile);
 IMAGE_FORMATS.set(".jpg", ImageFile);
 IMAGE_FORMATS.set(".svg", SVGFile);
 
-class SitemapFile extends BuildFile {
-  constructor(build) {
-    super(null);
-    this.build = build;
-  }
-
-  getType() {
-    return ".xml";
-  }
-
-  read() {
-    let xml = "";
-    xml += '<?xml version="1.0" encoding="UTF-8"?>\n';
-    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
-
-    xml += Object.keys(this.build.files)
-      .filter((file) => file.endsWith(".html"))
-      .map((file) => file.replace("index.html", "").replace(".html", ""))
-      .sort((a, b) => {
-        if (a.length < b.length) return -1;
-        if (a.length > b.length) return 1;
-        return a - b;
-      })
-      .map((path) => `https://extensions.turbowarp.org${path}`)
-      .map((absoluteURL) => `<url><loc>${absoluteURL}</loc></url>`)
-      .join("\n");
-
-    xml += "</urlset>\n";
-    return xml;
-  }
-}
-
-class DocsFile extends BuildFile {
-  constructor(absolutePath, extensionSlug) {
-    super(absolutePath);
-    this.extensionSlug = extensionSlug;
-  }
-
-  async read() {
-    const markdown = (await super.read()).toString("utf-8");
-    return renderDocs(markdown, this.extensionSlug);
-  }
-
-  getType() {
-    return ".html";
-  }
-}
-
-class SampleFile extends BuildFile {
-  getSlug() {
-    return pathUtil.basename(this.sourcePath);
-  }
-
-  getTitle() {
-    return this.getSlug().replace(".sb3", "");
-  }
-
-  /** @returns {string[]} list of full URLs */
-  getExtensionURLs() {
-    const zip = new AdmZip(this.sourcePath);
-    const entry = zip.getEntry("project.json");
-    if (!entry) {
-      throw new Error("package.json missing");
-    }
-    const data = JSON.parse(entry.getData().toString("utf-8"));
-    return data.extensionURLs ? Object.values(data.extensionURLs) : [];
-  }
-
-  validate() {
-    const urls = this.getExtensionURLs();
-
-    if (urls.length === 0) {
-      throw new Error("Has no extensions");
-    }
-
-    for (const url of urls) {
-      if (
-        !url.startsWith("https://extensions.turbowarp.org/") ||
-        !url.endsWith(".js")
-      ) {
-        throw new Error(`Invalid extension URL for sample: ${url}`);
-      }
-    }
-  }
-}
-
 class Build {
   constructor() {
     /** @type {Record<string, BuildFile>} */
@@ -639,12 +441,7 @@ class Build {
   }
 
   getFile(path) {
-    return (
-      this.files[path] ||
-      this.files[`${path}.html`] ||
-      this.files[`${path}index.html`] ||
-      null
-    );
+    return this.files[path] || null;
   }
 
   async export(root) {
@@ -742,10 +539,7 @@ class Builder {
     }
 
     this.extensionsRoot = pathUtil.join(import.meta.dirname, "../extensions");
-    this.websiteRoot = pathUtil.join(import.meta.dirname, "../website");
     this.imagesRoot = pathUtil.join(import.meta.dirname, "../images");
-    this.docsRoot = pathUtil.join(import.meta.dirname, "../docs");
-    this.samplesRoot = pathUtil.join(import.meta.dirname, "../samples");
     this.translationsRoot = pathUtil.join(
       import.meta.dirname,
       "../translations"
@@ -800,7 +594,7 @@ class Builder {
         this.mode
       );
       extensionFiles[extensionSlug] = file;
-      build.files[`/${filename}`] = file;
+      build.files[`/extensions/${filename}`] = file;
     }
 
     /** @type {Record<string, ImageFile>} */
@@ -820,80 +614,13 @@ class Builder {
       build.files[`/images/${filename}`] = new ImageFileClass(absolutePath);
     }
 
-    /** @type {Set<string>} */
-    const extensionsWithDocs = new Set();
-
-    /** @type {Map<string, SampleFile[]>} */
-    const samples = new Map();
-    for (const [filename, absolutePath] of await recursiveReadDirectory(
-      this.samplesRoot
-    )) {
-      if (!filename.endsWith(".sb3")) {
-        continue;
-      }
-
-      const file = new SampleFile(absolutePath);
-      for (const url of file.getExtensionURLs()) {
-        const slug = new URL(url).pathname.substring(1).replace(".js", "");
-        if (samples.has(slug)) {
-          samples.get(slug).push(file);
-        } else {
-          samples.set(slug, [file]);
-        }
-      }
-      build.files[`/samples/${filename}`] = file;
-    }
-
-    for (const [filename, absolutePath] of await recursiveReadDirectory(
-      this.websiteRoot
-    )) {
-      build.files[`/${filename}`] = new BuildFile(absolutePath);
-    }
-
-    for (const [filename, absolutePath] of await recursiveReadDirectory(
-      this.docsRoot
-    )) {
-      if (!filename.endsWith(".md")) {
-        continue;
-      }
-      const extensionSlug = filename.split(".")[0];
-      const file = new DocsFile(absolutePath, extensionSlug);
-      extensionsWithDocs.add(extensionSlug);
-      build.files[`/${extensionSlug}.html`] = file;
-    }
-
-    // Don't rely on node_modules being stored in a specific location or having a specific structure
-    // so that this works when we are a dependency in a bigger npm tree.
-    const scratchblocksPath = urlUtil.fileURLToPath(
-      import.meta.resolve("@turbowarp/scratchblocks")
-    );
-    build.files["/docs-internal/scratchblocks.js"] = new BuildFile(
-      scratchblocksPath
-    );
-
-    build.files["/index.html"] = new HomepageFile(
-      extensionFiles,
-      extensionImages,
-      featuredExtensionSlugs,
-      extensionsWithDocs,
-      samples,
-      this.mode
-    );
-    build.files["/sitemap.xml"] = new SitemapFile(build);
-
-    build.files["/generated-metadata/extensions-v0.json"] =
+    build.files["/extensions.json"] =
       new JSONMetadataFile(
         extensionFiles,
         extensionImages,
         featuredExtensionSlugs,
-        extensionsWithDocs,
-        samples,
         translations["extension-metadata"]
       );
-
-    for (const [oldPath, newPath] of Object.entries(compatibilityAliases)) {
-      build.files[oldPath] = build.files[newPath];
-    }
 
     return build;
   }
@@ -928,9 +655,6 @@ class Builder {
         [
           this.extensionsRoot,
           this.imagesRoot,
-          this.websiteRoot,
-          this.docsRoot,
-          this.samplesRoot,
           this.translationsRoot,
         ],
         {
