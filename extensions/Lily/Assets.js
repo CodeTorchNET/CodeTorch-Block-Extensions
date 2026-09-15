@@ -1,6 +1,6 @@
 // Name: Asset Manager
 // ID: lmsAssets
-// Description: Add, remove, and get data from various types of assets.
+// Description: Rename, remove, reorder, and get data from various types of assets.
 // By: LilyMakesThings <https://scratch.mit.edu/users/LilyMakesThings/>
 // By: Mio <https://scratch.mit.edu/users/0znzw/>
 // License: MIT AND LGPL-3.0
@@ -11,7 +11,6 @@
   "use strict";
 
   const vm = Scratch.vm;
-  const runtime = vm.runtime;
   const Cast = Scratch.Cast;
 
   const requireNonPackagedRuntime = (blockName) => {
@@ -37,45 +36,6 @@
         color3: "#4661a2",
         name: Scratch.translate("Asset Manager"),
         blocks: [
-          {
-            opcode: "addSprite",
-            blockType: Scratch.BlockType.COMMAND,
-            text: Scratch.translate("add sprite from URL [URL]"),
-            arguments: {
-              URL: {
-                type: Scratch.ArgumentType.STRING,
-              },
-            },
-          },
-          {
-            opcode: "addCostume",
-            blockType: Scratch.BlockType.COMMAND,
-            text: Scratch.translate("add costume from URL [URL] named [NAME]"),
-            arguments: {
-              URL: {
-                type: Scratch.ArgumentType.STRING,
-              },
-              NAME: {
-                type: Scratch.ArgumentType.STRING,
-                defaultValue: "costume1",
-              },
-            },
-          },
-          {
-            opcode: "addSound",
-            blockType: Scratch.BlockType.COMMAND,
-            text: Scratch.translate("add sound from URL [URL] named [NAME]"),
-            arguments: {
-              URL: {
-                type: Scratch.ArgumentType.STRING,
-              },
-              NAME: {
-                type: Scratch.ArgumentType.STRING,
-                defaultValue: "sound1",
-              },
-            },
-          },
-          "---",
           {
             opcode: "renameSprite",
             blockType: Scratch.BlockType.COMMAND,
@@ -287,16 +247,6 @@
           },
           "---",
           {
-            opcode: "openProject",
-            blockType: Scratch.BlockType.COMMAND,
-            text: Scratch.translate("open project from URL [URL]"),
-            arguments: {
-              URL: {
-                type: Scratch.ArgumentType.STRING,
-              },
-            },
-          },
-          {
             // Legacy block
             hideFromPalette: true,
             opcode: "getProjectJSON",
@@ -314,24 +264,6 @@
                 menu: "project",
               },
             },
-          },
-          "---",
-          {
-            opcode: "loadExtension",
-            blockType: Scratch.BlockType.COMMAND,
-            text: Scratch.translate("load extension from URL [URL]"),
-            arguments: {
-              URL: {
-                type: Scratch.ArgumentType.STRING,
-                defaultValue:
-                  "https://extensions.turbowarp.org/Skyhigh173/json.js",
-              },
-            },
-          },
-          {
-            opcode: "getLoadedExtensions",
-            blockType: Scratch.BlockType.REPORTER,
-            text: Scratch.translate("loaded extensions"),
           },
         ],
         menus: {
@@ -393,106 +325,6 @@
         },
       };
     }
-
-    async addSprite(args, util) {
-      const url = Cast.toString(args.URL);
-
-      const response = await Scratch.fetch(url);
-      const json = await response.arrayBuffer();
-
-      try {
-        await vm.addSprite(json);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    // Thank you PenguinMod for providing this code.
-    async addCostume(args, util) {
-      const targetId = util.target.id;
-      const assetName = Cast.toString(args.NAME);
-
-      const res = await Scratch.fetch(args.URL);
-      const blob = await res.blob();
-
-      if (!(this._typeIsBitmap(blob.type) || blob.type === "image/svg+xml")) {
-        console.error(`Invalid MIME type: ${blob.type}`);
-        return;
-      }
-      const assetType = this._typeIsBitmap(blob.type)
-        ? runtime.storage.AssetType.ImageBitmap
-        : runtime.storage.AssetType.ImageVector;
-
-      // Bitmap data format is not actually enforced, but setting it to something that isn't in scratch-parser's
-      // known format list will throw an error when someone tries to load the project.
-      // (https://github.com/scratchfoundation/scratch-parser/blob/665f05d739a202d565a4af70a201909393d456b2/lib/sb3_definitions.json#L51)
-      const dataType =
-        blob.type === "image/svg+xml"
-          ? runtime.storage.DataFormat.SVG
-          : runtime.storage.DataFormat.PNG;
-
-      const arrayBuffer = await new Promise((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(fr.result);
-        fr.onerror = () =>
-          reject(new Error(`Failed to read as array buffer: ${fr.error}`));
-        fr.readAsArrayBuffer(blob);
-      });
-
-      const asset = runtime.storage.createAsset(
-        assetType,
-        dataType,
-        new Uint8Array(arrayBuffer),
-        null,
-        true
-      );
-      const md5ext = `${asset.assetId}.${asset.dataFormat}`;
-
-      try {
-        await vm.addCostume(
-          md5ext,
-          {
-            asset,
-            md5ext,
-            name: assetName,
-          },
-          targetId
-        );
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    async addSound(args, util) {
-      const targetId = util.target.id;
-      const assetName = Cast.toString(args.NAME);
-
-      const res = await Scratch.fetch(args.URL);
-      const buffer = await res.arrayBuffer();
-
-      const storage = runtime.storage;
-      const asset = storage.createAsset(
-        storage.AssetType.Sound,
-        storage.DataFormat.MP3,
-        new Uint8Array(buffer),
-        null,
-        true
-      );
-
-      try {
-        await vm.addSound(
-          {
-            asset,
-            md5: asset.assetId + "." + asset.dataFormat,
-            name: assetName,
-          },
-          targetId
-        );
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    // End of PenguinMod
 
     renameSprite(args, util) {
       const target = this._getTargetFromMenu(args.TARGET, util);
@@ -706,13 +538,6 @@
       return sounds[index].name;
     }
 
-    openProject(args) {
-      const url = Cast.toString(args.URL);
-      Scratch.fetch(url)
-        .then((r) => r.arrayBuffer())
-        .then((buffer) => vm.loadProject(buffer));
-    }
-
     getProjectJSON() {
       return Scratch.vm.toJSON();
     }
@@ -740,17 +565,6 @@
       }
     }
 
-    async loadExtension(args) {
-      const url = Cast.toString(args.URL);
-      await vm.extensionManager.loadExtensionURL(url);
-    }
-
-    getLoadedExtensions(args) {
-      return JSON.stringify(
-        Array.from(vm.extensionManager._loadedExtensions.keys())
-      );
-    }
-
     /* Utility Functions */
 
     _getSoundIndexByName(soundName, util) {
@@ -761,19 +575,6 @@
         }
       }
       return -1;
-    }
-
-    // PenguinMod
-    _typeIsBitmap(type) {
-      return (
-        type === "image/png" ||
-        type === "image/bmp" ||
-        type === "image/jpg" ||
-        type === "image/jpeg" ||
-        type === "image/jfif" ||
-        type === "image/webp" ||
-        type === "image/gif"
-      );
     }
 
     _getTargetFromMenu(targetName, util) {

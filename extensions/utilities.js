@@ -213,19 +213,6 @@
             text: Scratch.translate("current millisecond"),
           },
           {
-            opcode: "fetchFrom",
-
-            blockType: Scratch.BlockType.REPORTER,
-
-            text: Scratch.translate("content from [URL]"),
-            arguments: {
-              URL: {
-                type: Scratch.ArgumentType.STRING,
-                defaultValue: "https://extensions.turbowarp.org/hello.txt",
-              },
-            },
-          },
-          {
             opcode: "parseJSON",
 
             blockType: Scratch.BlockType.REPORTER,
@@ -349,12 +336,6 @@
 
     currentMillisecond() {
       return Date.now() % 1000;
-    }
-
-    fetchFrom({ URL }) {
-      return Scratch.fetch(URL)
-        .then((res) => res.text())
-        .catch((err) => "");
     }
 
     parseJSON({ PATH, JSON_STRING }) {

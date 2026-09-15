@@ -1042,6 +1042,8 @@
 
     constructor() {
       window.addEventListener("message", (event) => {
+        if (!this.IFrame || event.source !== this.IFrame.contentWindow) return;
+
         let eventType = event.data.type;
 
         if (!eventType) return;

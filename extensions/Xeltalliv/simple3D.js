@@ -1855,26 +1855,7 @@ void main() {
       text: "Open extra resources",
       func: "openSite",
       def: function () {
-        // Exempted from Scratch.openWindow as initiated by user gesture.
-        // docsURI won't ask for permission so it doesn't make sense for this to either.
-        // eslint-disable-next-line extension/use-scratch-open-window
-        window.open("https://xeltalliv.github.io/simple3d-extension/");
-      },
-    },
-    {
-      blockType: BlockType.BUTTON,
-      text: "Open sample project",
-      func: "getSampleProject",
-      def: function () {
-        const url = new URL(location.href);
-        url.searchParams.set(
-          "project_url",
-          "https://extensions.turbowarp.org/samples/Simple3D%20template.sb3"
-        );
-        // Exempted from Scratch.openWindow as it is in response to a user gesture and it does not
-        // bring in third-party websites at all.
-        // eslint-disable-next-line extension/use-scratch-open-window
-        window.open(url.href);
+        Scratch.openWindow("https://xeltalliv.github.io/simple3d-extension/");
       },
     },
     {
